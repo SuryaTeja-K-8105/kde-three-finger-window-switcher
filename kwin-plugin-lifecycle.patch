@@ -1,0 +1,21 @@
+diff --git a/src/input/KWinVirtualKeyboard.cpp b/src/input/KWinVirtualKeyboard.cpp
+index 9e6ca7b..b821360 100644
+--- a/src/input/KWinVirtualKeyboard.cpp
++++ b/src/input/KWinVirtualKeyboard.cpp
+@@ -29,7 +29,8 @@ KWinVirtualKeyboard::KWinVirtualKeyboard()
+ 
+ KWinVirtualKeyboard::~KWinVirtualKeyboard()
+ {
+-    reset();
++    // KWinInputBackend::reset() must release held keys while the global backend
++    // is still valid. InputActionsMain does that before destroying the backend.
+     if (auto *input = KWin::input()) {
+         input->removeInputDevice(&m_device);
+     }
+@@ -40,4 +41,4 @@ void KWinVirtualKeyboard::doKeyboardKey(KeyboardKey key, bool state)
+     Q_EMIT m_device.keyChanged(key.scanCode(), state ? KWin::KeyboardKeyState::Pressed : KWin::KeyboardKeyState::Released, timestamp(), &m_device);
+ }
+ 
+-}
+\ No newline at end of file
++}

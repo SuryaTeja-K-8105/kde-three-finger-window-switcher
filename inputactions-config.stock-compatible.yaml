@@ -1,0 +1,53 @@
+device_rules:
+  # Replace with your touchpad's exact name (see: inputactions devices list / /proc/bus/input/devices)
+  - conditions: $name == "YOUR_TOUCHPAD_NAME"
+    motion_threshold_3: 1
+    swipe:
+      angle_tolerance: 45
+
+touchpad:
+  speed:
+    events: 1
+  gestures:
+    # Horizontal movement opens Alt+Tab and navigates columns.
+    - type: swipe
+      direction: left_right
+      fingers: 3
+      threshold: 0.5
+      retain_on_mismatch: true
+      block_events: true
+      actions:
+        - on: begin
+          input:
+            - keyboard: [ +leftalt, tab ]
+        - on: update
+          interval: -55
+          input:
+            - keyboard: [ left ]
+        - on: update
+          interval: 55
+          input:
+            - keyboard: [ right ]
+        - on: end_cancel
+          input:
+            - keyboard: [ -leftalt ]
+
+    # Vertical movement navigates rows while Alt+Tab is held.
+    - type: swipe
+      direction: up_down
+      fingers: 3
+      threshold: 1
+      retain_on_mismatch: true
+      block_events: true
+      actions:
+        - on: update
+          interval: -55
+          input:
+            - keyboard: [ up ]
+        - on: update
+          interval: 55
+          input:
+            - keyboard: [ down ]
+        - on: end_cancel
+          input:
+            - keyboard: [ -leftalt ]

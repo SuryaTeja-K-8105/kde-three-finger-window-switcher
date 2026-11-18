@@ -1,0 +1,97 @@
+diff --git a/src/libinputactions/InputActionsMain.cpp b/src/libinputactions/InputActionsMain.cpp
+index 58c1775..79defc5 100644
+--- a/src/libinputactions/InputActionsMain.cpp
++++ b/src/libinputactions/InputActionsMain.cpp
+@@ -32,6 +32,11 @@ InputActionsMain::InputActionsMain()
+ InputActionsMain::~InputActionsMain()
+ {
+     // Release as many resources as possible when the compositor plugin is disabled (KWin doesn't unload plugins from the address space)
++    // Release virtual keys before clearing g_inputBackend. Its destructor runs
++    // after unique_ptr::reset() has already nulled the global pointer.
++    if (g_inputBackend) {
++        g_inputBackend->reset();
++    }
+     g_cursorShapeProvider.reset();
+     g_notificationManager.reset();
+     g_onScreenMessageManager.reset();
+@@ -259,4 +264,4 @@ void InputActionsMain::registerGlobalVariables(VariableRegistry *variableRegistr
+     });
+ }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/libinputactions/config/parsers/triggers.cpp b/src/libinputactions/config/parsers/triggers.cpp
+index 616c577..02e7123 100644
+--- a/src/libinputactions/config/parsers/triggers.cpp
++++ b/src/libinputactions/config/parsers/triggers.cpp
+@@ -112,6 +112,7 @@ void finalizeTrigger(const Node *node, Trigger *trigger)
+     loadSetter(trigger, &Trigger::setClearModifiers, node->at("clear_modifiers"));
+     loadSetter(trigger, &Trigger::setEndCondition, node->at("end_conditions"));
+     loadSetter(trigger, &Trigger::setId, node->at("id"));
++    loadSetter(trigger, &Trigger::setRetainOnMismatch, node->at("retain_on_mismatch"));
+     loadSetter(trigger, &Trigger::setResumeTimeout, node->at("resume_timeout"));
+     loadSetter(trigger, &Trigger::setSetLastTrigger, node->at("set_last_trigger"));
+     loadSetter(trigger, &Trigger::setThreshold, node->at("threshold"));
+@@ -301,4 +302,4 @@ void NodeParser<std::unique_ptr<TouchscreenTrigger>>::parse(const Node *node, st
+     finalizeTrigger(node, result.get());
+ }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/libinputactions/handlers/TriggerHandler.cpp b/src/libinputactions/handlers/TriggerHandler.cpp
+index 3679f53..107193d 100644
+--- a/src/libinputactions/handlers/TriggerHandler.cpp
++++ b/src/libinputactions/handlers/TriggerHandler.cpp
+@@ -112,6 +112,15 @@ TriggerManagementOperationResult TriggerHandler::updateTriggers(const std::map<T
+ 
+         const auto event = events.at(type);
+         if (!trigger->canUpdate(*event)) {
++            if (trigger->retainOnMismatch()) {
++                // Keep directional swipe triggers armed while another axis is active.
++                // This lets chained horizontal/vertical gestures share one lifecycle,
++                // so end/cancel cleanup runs only when the physical gesture ends.
++                result.success = true;
++                result.block = result.block || trigger->blockEvents();
++                it++;
++                continue;
++            }
+             if (trigger->endIfCannotUpdate()) {
+                 trigger->end();
+             } else {
+@@ -318,4 +327,4 @@ std::unique_ptr<TriggerActivationEvent> TriggerHandler::createActivationEvent()
+ 
+ void TriggerHandler::reset() {}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/libinputactions/triggers/Trigger.h b/src/libinputactions/triggers/Trigger.h
+index 6713095..672e0e9 100644
+--- a/src/libinputactions/triggers/Trigger.h
++++ b/src/libinputactions/triggers/Trigger.h
+@@ -136,6 +136,8 @@ public:
+      */
+     const std::shared_ptr<Condition> &endCondition() const { return m_endCondition; }
+     void setEndCondition(std::shared_ptr<Condition> value) { m_endCondition = std::move(value); }
++    bool retainOnMismatch() const { return m_retainOnMismatch; }
++    void setRetainOnMismatch(bool value) { m_retainOnMismatch = value; }
+ 
+     /**
+      * Whether this trigger should block all input events required to perform it while active. Only one active trigger needs this member set to true in order
+@@ -207,6 +209,7 @@ private:
+ 
+     std::shared_ptr<Condition> m_activationCondition;
+     std::shared_ptr<Condition> m_endCondition;
++    bool m_retainOnMismatch = false;
+     bool m_blockEvents = true;
+     std::optional<bool> m_clearModifiers;
+     QString m_id;
+@@ -218,4 +221,4 @@ private:
+     friend class TestTrigger;
+ };
+ 
+-}
+\ No newline at end of file
++}

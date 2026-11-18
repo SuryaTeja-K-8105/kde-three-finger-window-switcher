@@ -1,0 +1,75 @@
+scripting:
+  scripts:
+    - source: |
+        const { variableRegistry, VariableType } = require("inputactions/core");
+        var switcherOpen = variableRegistry.registerStoredVariable("switcher_open_v4", VariableType.Boolean);
+        switcherOpen.value = false;
+        function markSwitcherOpen() { switcherOpen.value = true; }
+        function resetSwitcher() { switcherOpen.value = false; }
+
+device_rules:
+  - conditions: $name == "SYNA32A0:00 06CB:CE14 Touchpad"
+    motion_threshold_3: 1
+    swipe:
+      angle_tolerance: 45
+
+touchpad:
+  speed:
+    events: 1
+  gestures:
+    # Horizontal movement opens Alt+Tab. Keep Alt held across axis changes;
+    # the active swipe trigger releases it when the fingers lift.
+    - type: swipe
+      direction: left_right
+      fingers: 3
+      threshold: 0.5
+      retain_on_mismatch: true
+      block_events: true
+      actions:
+        - on: begin
+          conditions: $switcher_open_v4 == false
+          input:
+            - keyboard: [ +leftalt, tab, leftshift+tab ]
+        - on: begin
+          conditions: $switcher_open_v4 == false
+          function: markSwitcherOpen
+        - on: update
+          interval: -55
+          conditions: $switcher_open_v4 == true
+          input:
+            - keyboard: [ left ]
+        - on: update
+          interval: 55
+          conditions: $switcher_open_v4 == true
+          input:
+            - keyboard: [ right ]
+        - on: end_cancel
+          input:
+            - keyboard: [ -leftalt ]
+        - on: end_cancel
+          function: resetSwitcher
+
+    # Vertical movement only navigates rows after the horizontal opener.
+    # This trigger still blocks KWin's built-in vertical touchpad gesture.
+    - type: swipe
+      direction: up_down
+      fingers: 3
+      threshold: 1
+      retain_on_mismatch: true
+      block_events: true
+      actions:
+        - on: update
+          interval: -55
+          conditions: $switcher_open_v4 == true
+          input:
+            - keyboard: [ up ]
+        - on: update
+          interval: 55
+          conditions: $switcher_open_v4 == true
+          input:
+            - keyboard: [ down ]
+        - on: end_cancel
+          input:
+            - keyboard: [ -leftalt ]
+        - on: end_cancel
+          function: resetSwitcher
